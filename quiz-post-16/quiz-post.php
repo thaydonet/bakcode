@@ -86,66 +86,132 @@ function quiz_display_allowed_html() {
     return $allowed_tags;
 }
 
-// Hàm xử lý biến số
-function replace_variables($text, &$variables) {
-    return preg_replace_callback(
-        '/\!([a-zA-Z0-9*]+)(?::(-?\d+):(-?\d+))?\!/',
-        function($matches) use (&$variables) {
-            $varName = $matches[1];
-            $min = isset($matches[2]) ? (int)$matches[2] : -10;
-            $max = isset($matches[3]) ? (int)$matches[3] : 10;
-
-            $isNonZero = strpos($varName, '*0') !== false;
-            $varName = str_replace('*0', '', $varName);
-
-            if (!array_key_exists($varName, $variables)) {
-                do {
-                    $value = rand($min, $max);
-                } while ($isNonZero && $value === 0);
-                $variables[$varName] = $value;
-            }
-
-            return $variables[$varName];
-        },
-        $text
-    );
-}
+// Làm đẹp biểu thức trong PHP
 function process_variables_php($text, &$variables) {
     if (!is_string($text)) return $text;
     $pattern = '/(.*?)(<[^>]+>|$)/s';
     $output = '';
     
+    // Lưu trữ các biến phụ thuộc (biến không được có giá trị trùng với các biến khác)
+    $dependencies = [];
+    
+    // Pattern để tìm các định nghĩa phụ thuộc: !varName≠otherVar! hoặc !varName!=otherVar!
+    preg_match_all('/\!([a-zA-Z0-9]+)(?:≠|!=)([a-zA-Z0-9,]+)\!/', $text, $depMatches, PREG_SET_ORDER);
+    foreach ($depMatches as $match) {
+        $varName = $match[1];
+        $otherVars = explode(',', $match[2]);
+        $dependencies[$varName] = $otherVars;
+    }
+    
     preg_match_all($pattern, $text, $matches, PREG_SET_ORDER);
     foreach ($matches as $match) {
         $text_part = $match[1];
         $html_part = $match[2];
+        
         if (!empty($text_part)) {
+            // Match format !varName(val1,val2,val3)! for random selection
             $text_part = preg_replace_callback(
-                '/\!([a-zA-Z0-9]+(?:\*0)?)(?::(-?\d+):(-?\d+))?\!/',
-                function($matches) use (&$variables) {
+                '/\!([a-zA-Z0-9]+)\(([^)]+)\)\!/',
+                function($matches) use (&$variables, $dependencies) {
                     $varName = $matches[1];
-                    $min = isset($matches[2]) ? (int)$matches[2] : -10;
-                    $max = isset($matches[3]) ? (int)$matches[3] : 10;
-                    $isNonZero = strpos($varName, '*0') !== false;
-                    $varName = str_replace('*0', '', $varName);
                     
+                    // Check if variable exists
                     if (!array_key_exists($varName, $variables)) {
-                        do {
-                            $value = rand($min, $max);
-                        } while ($isNonZero && $value === 0);
-                        $variables[$varName] = $value;
-                    } else {
-                        $value = $variables[$varName];
+                        // Split comma-separated values
+                        $options = array_map('trim', explode(',', $matches[2]));
+                        
+                        // Xử lý phụ thuộc (nếu có)
+                        if (isset($dependencies[$varName])) {
+                            $forbiddenValues = [];
+                            foreach ($dependencies[$varName] as $depVar) {
+                                if (isset($variables[$depVar])) {
+                                    $forbiddenValues[] = $variables[$depVar];
+                                }
+                            }
+                            
+                            // Lọc ra các giá trị cho phép
+                            $allowedOptions = array_diff($options, $forbiddenValues);
+                            
+                            // Nếu còn lựa chọn hợp lệ
+                            if (!empty($allowedOptions)) {
+                                $options = array_values($allowedOptions);
+                            }
+                        }
+                        
+                        // Randomly select a value
+                        $variables[$varName] = $options[array_rand($options)];
                     }
                     
-                    return $value;
+                    return $variables[$varName];
                 },
                 $text_part
             );
+            
+            // Process pattern !varName≠otherVar! or !varName!=otherVar! just to remove them from text
+            $text_part = preg_replace('/\!([a-zA-Z0-9]+)(?:≠|!=)([a-zA-Z0-9,]+)\!/', '', $text_part);
+            
+            // Updated pattern to match !varName#otherVar! format for different values
+            $text_part = preg_replace_callback(
+                '/\!([a-zA-Z0-9]+)(?:#([a-zA-Z0-9]+))?(?::(-?\d+):(-?\d+))?\!/',
+                function($matches) use (&$variables, $dependencies) {
+                    $varName = $matches[1];
+                    $notEqualToVar = isset($matches[2]) ? $matches[2] : null;
+                    
+                    $min = isset($matches[3]) ? (int)$matches[3] : -10;
+                    $max = isset($matches[4]) ? (int)$matches[4] : 10;
+                    
+                    if (!array_key_exists($varName, $variables)) {
+                        // Xử lý phụ thuộc (nếu có)
+                        $forbiddenValues = [];
+                        if (isset($dependencies[$varName])) {
+                            foreach ($dependencies[$varName] as $depVar) {
+                                if (isset($variables[$depVar])) {
+                                    $forbiddenValues[] = $variables[$depVar];
+                                }
+                            }
+                        }
+                        
+                        // Thêm giá trị của biến khác vào danh sách cấm (nếu có)
+                        if ($notEqualToVar && isset($variables[$notEqualToVar])) {
+                            $forbiddenValues[] = $variables[$notEqualToVar];
+                        }
+                        
+                        // Tạo giá trị ngẫu nhiên không trùng với các giá trị cấm
+                        $maxAttempts = 100; // Tránh vòng lặp vô hạn
+                        $attempts = 0;
+                        
+                        do {
+                            $value = rand($min, $max);
+                            $attempts++;
+                            
+                            // Check if value is valid (not in forbidden values)
+                            $validValue = !in_array($value, $forbiddenValues);
+                          
+                            if ($attempts > $maxAttempts) {
+                                // Nếu quá nhiều lần thử, chỉ đảm bảo không trùng với biến chính
+                                if ($notEqualToVar && isset($variables[$notEqualToVar])) {
+                                    $validValue = ($value !== $variables[$notEqualToVar]);
+                                } else {
+                                    $validValue = true;
+                                }
+                            }
+                            
+                        } while (!$validValue);
+                        
+                        $variables[$varName] = $value;
+                    }
+                    
+                    return $variables[$varName];
+                },
+                $text_part
+            );
+            
+            // Remove leading + if present
             if (substr($text_part, 0, 1) === '+') {
                 $text_part = substr($text_part, 1);
             }
             
+            // Process mathematical expressions and handle +0 to empty
             $text_part = preg_replace_callback(
                 '/([+-]?)(\d*\.?\d+)([x](?:\^?\d*)?(?:_[0-9]+)?)?/',
                 function ($matches) {
@@ -153,6 +219,11 @@ function process_variables_php($text, &$variables) {
                     $originalNumber = $matches[2]; // Giữ nguyên chuỗi số gốc
                     $coefficient = (float)$originalNumber;
                     $xPart = $matches[3] ?? '';
+                    
+                    // Nếu là "+0", trả về chuỗi rỗng
+                    if ($sign === '+' && $coefficient == 0 && empty($xPart)) {
+                        return '';
+                    }
                     
                     if ($coefficient == 0 && !empty($xPart)) {
                         return '';
@@ -168,7 +239,7 @@ function process_variables_php($text, &$variables) {
                         if ($coefficient == 1) {
                             return $sign . $xPart;
                         } else {
-                            // Sử dụng định dạng số gốc để giữ nguyên các số 0 ở đầu số thập phân
+                          
                             return $sign . $originalNumber . $xPart;
                         }
                     } else {
@@ -190,6 +261,7 @@ function process_variables_php($text, &$variables) {
     }
     return $output;
 }
+
 // Shortcode cho bộ câu hỏi
 function quiz_set_shortcode($atts, $content = null) {
     $atts = shortcode_atts(array(
@@ -335,7 +407,7 @@ add_shortcode('quiz_question_TLN', 'quiz_question_short_answer_shortcode');
 
 // Thêm menu quản trị
 function quiz_display_admin_menu() {
-    add_menu_page('Quiz Display Settings', 'Quiz Display', 'manage_options', 'quiz-display-settings', 'quiz_display_settings_page', 'dashicons-clipboard');
+    add_menu_page('Quiz Display Settings', 'Quiz Display', 'manage_options', 'quiz-display-settings', 'quiz_display_settings_page', 'dashicons-welcome-learn-more');
     add_submenu_page('quiz-display-settings', 'Xem Điểm', 'Xem Điểm', 'manage_options', 'quiz-results', 'quiz_display_results_page');
     add_submenu_page('quiz-display-settings', 'Thống Kê Bài Thi', 'Thống Kê Bài Thi', 'manage_options', 'quiz-stats', 'quiz_display_stats_page');
 }
