@@ -112,12 +112,15 @@ function initializeSingleChoice(question, variables, quizSet) {
     if (newCorrect) {
       question.dataset.correct = encodeCorrect(newCorrect);
     }
-  }
-		  // Render MathJax sau khi cập nhật options
-    if (typeof MathJax !== 'undefined' && MathJax.typeset) {
-      MathJax.typeset([question.querySelector('.options-section')]);
+	 // === THÊM LỆNH GỌI MATHJAX Ở ĐÂY ===
+    // Yêu cầu MathJax chỉ quét lại phần optionsSection vừa được cập nhật
+    if (typeof MathJax !== 'undefined' && MathJax.Hub) {
+      MathJax.Hub.Queue(["Typeset", MathJax.Hub, optionsSection]);
+       console.log("MathJax queued for typesetting on optionsSection:", optionsSection); // Log để kiểm tra
     }
-
+    // =====================================  
+	  
+	}
 }
 
 // Khởi tạo câu hỏi đúng/sai
@@ -153,10 +156,6 @@ function initializeTrueFalse(question, variables, quizSet) {
     });
     question.dataset.options = JSON.stringify(newOptions);
     question.dataset.correct = encodeCorrect(newCorrect.join(','));
-	  // Render MathJax sau khi cập nhật options
-    if (typeof MathJax !== 'undefined' && MathJax.typeset) {
-      MathJax.typeset([question.querySelector('.options-section')]);
-    }
   }
 }
 
@@ -183,10 +182,7 @@ function initializeQuiz(quizSet, questions, variables) {
     const explanation = question.querySelector('.explanation-content');
     if (explanation) explanation.innerHTML = calculateExpression(processVariables(explanation.innerHTML, variables));
   });
-// Render MathJax sau khi đã xử lý tất cả câu hỏi
-  if (typeof MathJax !== 'undefined' && MathJax.typeset) {
-    MathJax.typeset();
-  }
+
 }
 
 // Tính điểm
@@ -510,5 +506,4 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   });
-
 });
