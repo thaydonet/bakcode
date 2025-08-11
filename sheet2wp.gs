@@ -3,12 +3,12 @@
 // ===============================================================
 
 // 1. API Key của Google Gemini
-const GEMINI_API_KEY = 'AIzaSyC9zlAMGJK3YZIlbNqUbz1P9SPbH0az8m0'; // <-- THAY THẾ BẰNG API KEY CỦA BẠN
+const GEMINI_API_KEY = '*********************'; // <-- THAY THẾ BẰNG API KEY CỦA BẠN
 
 // 2. Thông tin WordPress
 const WP_URL = 'https://hoc.io.vn'; // <-- THAY BẰNG TÊN MIỀN CỦA BẠN
 const WP_USERNAME = 'admin';   // <-- THAY BẰNG USERNAME ĐĂNG NHẬP WP
-const WP_APP_PASSWORD = 'rTfv u8Di HsHx oomc rqG3 SMHp'; // <-- THAY BẰNG MẬT KHẨU ỨNG DỤNG
+const WP_APP_PASSWORD = '646456'; // <-- THAY BẰNG MẬT KHẨU ỨNG DỤNG
 
 // 3. Chuyên mục và Thẻ cho bài viết (XEM HƯỚNG DẪN BÊN DƯỚI ĐỂ LẤY ID)
 const WP_CATEGORY_IDS = [5]; // <-- THAY BẰNG ID CHUYÊN MỤC CỦA BẠN, ví dụ: [12] hoặc [12, 15]
